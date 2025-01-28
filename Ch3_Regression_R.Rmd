@@ -1,7 +1,7 @@
 ---
 title: "Regression"
-author: "Maysen Pagan"
-date: "2024-01-25"
+author: "Chenran Zhang"
+date: "2025-01-27"
 output: html_document
 ---
 
@@ -52,14 +52,16 @@ The goal of this exercise is to predict the price of the house.
 
 Here is a histogram of the sales price with red line showing the mean.
 ```{r,echo=show_code,fig.width=7,fig.height=4.5}
-ggplot(ames_raw)+geom_histogram(fill="skyblue")+aes(x=SalePrice)+
+ggplot(ames_raw) +
+  geom_histogram(fill="skyblue" ) +
+  aes(x=SalePrice) +
   geom_vline(xintercept = mean(ames_raw$SalePrice),col="red")
 summary(ames_raw$SalePrice)
 ```
 
 Initial linear model without a predictor
 ```{r,echo=show_code}
-lmfit_null<- lm(SalePrice~1,ames_raw)
+lmfit_null<- lm(SalePrice~1, ames_raw)
 summary(lmfit_null)
 ```
 
@@ -70,7 +72,12 @@ sqrt(mean(residuals(lmfit_null)^2))
 
 Since the price is right skewed lets log transformation the outcome
 ```{r,echo=show_code,fig.width=7,fig.height=4.5}
-ggplot(ames_raw)+geom_histogram(fill="skyblue")+aes(x=SalePrice)+geom_vline(xintercept = exp(mean(log(ames_raw$SalePrice))),col="red")+scale_x_log10()
+ggplot(ames_raw) + 
+  geom_histogram(fill="skyblue") +
+  aes(x=SalePrice) +
+  geom_vline(xintercept = exp(mean(log(ames_raw$SalePrice))),
+             col="red") +
+  scale_x_log10()
 ```
 
 Fitting the same model on the log transformed outcome
@@ -310,14 +317,36 @@ Try to answer the following additional questions.
 
 Your code:
 ```{r,echo=TRUE}
-#
-#
+# Residual plot for assessing model fit
+plot(predict(lmfit_2008), residuals(lmfit_2008),
+     xlab = "Predicted Values",
+     ylab = "Residuals",
+     main = "Residual Plot for Model Fit")
+abline(h = 0, col = "red", lty = 2)
+
+# Calculate RMSE and operation loss for training data
+train_preds <- exp(predict(lmfit_2008, newdata = ames_raw_2008))
+train_loss <- calc_loss(train_preds, ames_raw_2008$SalePrice)
+cat("Training RMSE:", train_loss[[1]], "\n")
+cat("Training Operational Loss:", train_loss[[2]], "\n")
+
+# Evaluate the model on the test data
+test_preds <- exp(predict(lmfit_2008, newdata = ames_raw_2009))
+test_loss <- calc_loss(test_preds, ames_raw_2009$SalePrice)
+cat("Test RMSE:", test_loss[[1]], "\n")
+cat("Test Operational Loss:", test_loss[[2]], "\n")
+
+# Check the distribution of residuals
+hist(residuals(lmfit_2008), breaks = 20, col = "skyblue",
+     main = "Residual Distribution",
+     xlab = "Residuals")
+
 ```
 
 Your answer:
 
 ~~~
-Please write your answer in full sentences.
+The model shows a reasonable fit overall, but there are areas where the fit is off. The residual plot indicates that residuals are generally centered around zero, suggesting no significant bias. However, the spread of residuals is not entirely consistent, showing heteroscedasticity for higher predicted values. This suggests the model struggles to capture variability in higher-priced homes. Additionally, the residual histogram shows a roughly normal distribution, but some outliers may impact model accuracy. While the test RMSE is reasonable, further refinement (e.g., additional predictors or transformations) could improve performance.
 
 
 ~~~
@@ -327,8 +356,7 @@ Please write your answer in full sentences.
 
 Your code:
 ```{r,echo=TRUE}
-#
-#
+summary(ames_raw_2008)
 ```
 
 Your answer:
@@ -344,6 +372,15 @@ We should not include all 83 predictors of the data set. Including so many predi
 
 Your code:
 ```{r,echo=TRUE}
+# Fit a model with interaction terms
+interaction_model <- lm(log(SalePrice) ~ log(`Lot Area`) * `TotRms AbvGrd` + log(`Lot Area`) * `Garage Cars`, data = ames_raw_2008)
+
+# Summary of the interaction model
+summary(interaction_model)
+
+# Compare with a model without interactions
+no_interaction_model <- lm(log(SalePrice) ~ log(`Lot Area`) + `TotRms AbvGrd` + `Garage Cars`, data = ames_raw_2008)
+anova(no_interaction_model, interaction_model)
 
 ```
 
@@ -359,14 +396,25 @@ Interactions involving the lot area of properties and other predictors make sens
 
 Your code:
 ```{r,echo=TRUE}
-#
-#
+predictors <- c("Gr Liv Area", "Lot Area", "Year Built", "Overall Qual", "Garage Cars")
+
+# Handle missing values in Garage Cars (if any)
+ames_raw_2008$`Garage Cars`[is.na(ames_raw_2008$`Garage Cars`)] <- median(ames_raw_2008$`Garage Cars`, na.rm = TRUE)
+
+# Fit models with polynomial terms for each predictor
+for (predictor in predictors) {
+  formula <- as.formula(paste("log(SalePrice) ~ poly(`", predictor, "`, 3)", sep = ""))
+  model <- lm(formula, data = ames_raw_2008)
+  cat("Results for predictor:", predictor, "\n")
+  print(summary(model))
+  cat("\n")
+}
 ```
 
 Your answer:
 
 ~~~
-Please write your answer in full sentences.
+In summary, predictors such as Lot Area, Overall Qual, and Garage Cars exhibit strong non-linear associations, while Gr Liv Area and Year Built show moderate non-linear relationships. Including polynomial terms for these predictors can improve the model's ability to capture these complex patterns.
 
 
 ~~~
@@ -375,15 +423,22 @@ Please write your answer in full sentences.
 
 Your code:
 ```{r,echo=TRUE}
-#
-#
+# Predict sale prices using the model
+ames_raw_2008$predicted_prices <- exp(predict(lmfit_2008, newdata = ames_raw_2008))
+
+# Calculate residuals (difference between actual and predicted prices)
+ames_raw_2008$residuals <- ames_raw_2008$SalePrice - ames_raw_2008$predicted_prices
+
+# Identify the top 5 most overpriced houses (largest positive residuals)
+most_overpriced <- ames_raw_2008[order(-ames_raw_2008$residuals), ][1:5, c("PID", "SalePrice", "predicted_prices", "residuals")]
+
+most_overpriced
 ```
 
 Your answer:
 
 ~~~
-Please write your answer in full sentences.
-
+The top 5 most overpriced houses based on the model are PIDs 0528320050, 0528351010, 0905427030, 0528360050, and 0527256030, with overpricing amounts of $305,443, $297,320.2, $236,589.7, $196,364.7, and $170,655.3, respectively.
 
 ~~~
 
@@ -391,14 +446,16 @@ Please write your answer in full sentences.
 
 Your code:
 ```{r,echo=TRUE}
-#
-#
+# Identify the top 5 best deals (largest negative residuals)
+most_good_deals <- ames_raw_2008[order(ames_raw_2008$residuals), ][1:5, c("PID", "SalePrice", "predicted_prices", "residuals")]
+
+most_good_deals
 ```
 
 Your answer:
 
 ~~~
-Please write your answer in full sentences.
+The top 5 best deals based on the model are PIDs 0908154195, 0908154205, 0528431110, 0528118110, and 0914476500, undervalued by $379,264.33, $337,983.90, $134,104.63, $78,369.23, and $75,439.33, respectively.
 
 
 ~~~
@@ -452,8 +509,7 @@ Auto %>% ggplot(aes(horsepower, mpg)) +
 Your answer:
 
 ~~~
-Please write your answer in full sentences.
-
+The plot shows a clear negative linear relationship between horsepower and mpg, with the least squares regression line illustrating how fuel efficiency (mpg) decreases as horsepower increases.
 
 ~~~
 
@@ -486,8 +542,7 @@ pairs(Auto, pch = 19, cex = 0.5)
 Your answer:
 
 ~~~
-Please write your answer in full sentences.
-
+The scatterplot matrix visually displays relationships among all variables in the Auto dataset, revealing strong negative correlations between mpg and predictors like horsepower, weight, and cylinders, and positive correlations among displacement, horsepower, and weight.
 
 ~~~
 
@@ -504,7 +559,7 @@ cor(Auto[,1:8])
 Your answer:
 
 ~~~
-Please write your answer in full sentences.
+The correlation matrix shows several notable relationships among the variables in the Auto dataset. mpg is strongly negatively correlated with weight (-0.83), displacement (-0.81), horsepower (-0.78), and cylinders (-0.78), indicating that cars with higher values for these predictors tend to have lower fuel efficiency. Positive correlations include mpg with year (0.58) and origin (0.57), suggesting newer cars and those from certain regions are more fuel-efficient. Additionally, strong positive correlations are observed among cylinders, displacement, horsepower, and weight, reflecting the interdependence of these vehicle characteristics.
 
 
 ~~~
@@ -560,8 +615,9 @@ summary(mod2)
 Your answer:
 
 ~~~
-Please write your answer in full sentences.
+The interaction terms year:horsepower and cylinders:horsepower were added to the model to explore whether the relationship between horsepower and mpg depends on the year of manufacture or the number of cylinders in the vehicle. Including these interactions allows the model to capture how the impact of horsepower on fuel efficiency might vary across different levels of these variables.
 
+The results indicate that both interaction terms are statistically significant (p < 0.001 for cylinders:horsepower and p < 0.001 for year:horsepower). This suggests that the effect of horsepower on mpg is indeed influenced by the year of manufacture and the number of cylinders. For example, newer cars or those with fewer cylinders may exhibit a different relationship between horsepower and fuel efficiency compared to older cars or those with more cylinders. These findings highlight the importance of considering interactions to better model complex relationships in the data.
 
 ~~~
 
@@ -574,15 +630,16 @@ This question should be answered using the Carseats data set.
 
 Your code:
 ```{r,echo=TRUE}
-#
-#
+data(Carseats)
+
+model_sales <- lm(Sales ~ Price + Urban + US, data = Carseats)
+summary(model_sales)
 ```
 
 Your answer:
 
 ~~~
-Please write your answer in full sentences.
-
+The regression model indicates that Price and US are significant predictors of Sales, while Urban is not statistically significant (p = 0.936). The coefficient for Price (-0.054) suggests that as the price increases by one unit, sales decrease on average by 0.054 units, holding other variables constant. The coefficient for USYes (1.201) indicates that stores in the US have, on average, 1.201 higher sales compared to non-US stores, holding other factors constant. The non-significant coefficient for UrbanYes suggests that being in an urban area does not significantly impact sales. The model explains approximately 23.35% of the variability in Sales.
 
 ~~~
 
@@ -590,15 +647,22 @@ Please write your answer in full sentences.
 
 Your code:
 ```{r,echo=TRUE}
-#
-#
+summary(model_sales)
+
 ```
 
 Your answer:
 
 ~~~
-Please write your answer in full sentences.
+Intercept (13.043469): When Price is 0, the store is not in an urban area (UrbanNo), and the store is outside the US (USNo), the average sales are predicted to be 13.043 units. This is a baseline value, though Price = 0 is unrealistic in practice.
 
+Price (-0.054459): For every one-unit increase in Price, sales decrease on average by 0.054 units, holding all other variables constant. This negative coefficient reflects the inverse relationship between price and sales.
+
+UrbanYes (-0.021916): The small, non-significant coefficient suggests that sales in urban stores (UrbanYes) are not statistically different from those in non-urban stores (UrbanNo), as the p-value is very high (p=0.936).
+
+USYes (1.200573): Stores in the US (USYes) have, on average, 1.201 more units of sales compared to stores outside the US (USNo), holding other factors constant. This relationship is statistically significant (p<0.001).
+
+The adjusted R^2 =0.2335 indicates that about 23.35% of the variance in sales is explained by the model, with Price and US being significant predictors while Urban has no significant impact.
 
 ~~~
 
@@ -606,15 +670,24 @@ Please write your answer in full sentences.
 
 Your code:
 ```{r,echo=TRUE}
-#
-#
+coef(model_sales)
 ```
 
 Your answer:
 
 ~~~
-Please write your answer in full sentences.
+The regression model for Sales can be written as: Sales = 13.043 − 0.054 × Price − 0.022 × UrbanYes + 1.201 × USYes
 
+UrbanYes: This variable takes the value:
+
+1 if the store is in an urban area.
+0 if the store is not in an urban area.
+
+
+USYes: This variable takes the value:
+
+1 if the store is in the US.
+0 if the store is outside the US.
 
 ~~~
 
@@ -623,8 +696,9 @@ Please write your answer in full sentences.
 Your answer:
 
 ~~~
-Please write your answer in full sentences.
+Based on the regression output, we can reject the null hypothesis for the predictors Price and USYes because their p-values are both less than 0.001, indicating strong statistical significance.
 
+However, we cannot reject the null hypothesis for UrbanYes because its p-value (0.936) is much greater than the common significance threshold of 0.05, suggesting it does not have a significant impact on sales.
 
 ~~~
 
@@ -632,15 +706,14 @@ Please write your answer in full sentences.
 
 Your code:
 ```{r,echo=TRUE}
-#
-#
+model_sales_reduced <- lm(Sales ~ Price + US, data = Carseats)
+summary(model_sales_reduced)
 ```
 
 Your answer:
 
 ~~~
-Please write your answer in full sentences.
-
+This reduced model only includes the significant predictors Price and US since there is strong evidence of association with the outcome (p < 0.05). The non-significant predictor Urban is excluded to simplify the model and improve interpretability.
 
 ~~~
 
@@ -651,8 +724,11 @@ Please write your answer in full sentences.
 Your answer:
 
 ~~~
-Please write your answer in full sentences.
+The model in (a), which includes Price, Urban, and US, has an adjusted R^2 of 0.2335, meaning it explains approximately 23.35% of the variance in sales. The residual standard error (RSE) is 2.472, indicating the average deviation of the observed sales from the predicted values.
 
+The model in (e), which includes only Price and US, has a similar adjusted R^2 and RSE because Urban was not a significant predictor in the full model. Excluding Urban does not substantially affect the model's ability to explain the variability in sales, but it simplifies the model by focusing only on significant predictors.
+
+Overall, both models fit the data reasonably well but leave a substantial amount of unexplained variance, suggesting that additional predictors or transformations may be needed for better performance.
 
 ~~~
 
@@ -660,15 +736,13 @@ Please write your answer in full sentences.
 
 Your code:
 ```{r,echo=TRUE}
-#
-#
+confint(model_sales_reduced, level = 0.95)
 ```
 
 Your answer:
 
 ~~~
-Please write your answer in full sentences.
-
+The 95% confidence intervals for the reduced model indicate that the intercept ranges from 11.79 to 14.27, the effect of Price ranges from -0.065 to -0.044 (confirming a negative relationship), and the effect of USYes ranges from 0.69 to 1.71, showing a significant positive impact of being in the US on sales.
 
 ~~~
 
@@ -678,8 +752,7 @@ Please write your answer in full sentences.
 Your answer:
 
 ~~~
-Please write your answer in full sentences.
-
+To determine if there is evidence of outliers or high leverage observations in the model from (e), we can examine diagnostic plots such as residual vs. fitted values, leverage plots, and Cook's distance. Observations with large residuals or high leverage (typically a leverage value significantly above 2 * average leverage may indicate potential outliers or influential points. If Cook's distance is greater than 1, it suggests that an observation might have an undue influence on the model. A detailed diagnostic analysis is necessary to confirm their presence.
 
 ~~~
 
